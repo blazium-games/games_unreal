@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: ci
+    if: github.ref_name == 'master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get Version with Bioblaze/game-semver-action
+        id: version
+        uses: Bioblaze/game-semver-action@v10
+        with:
+          personal_github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Finalize version
+        id: finalize
+        run: |
+          set -euo pipefail
+          COMPUTED="${{ steps.version.outputs.simple_version }}"
+          BASE="2.0.0"
+          if [ -z "$COMPUTED" ]; then
+            COMPUTED="$BASE"
+          fi
+          CANDIDATE="$(printf '%s\n%s\n' "$COMPUTED" "$BASE" | sort -V | tail -n1)"
+          echo "simple_version=${CANDIDATE}" >> "$GITHUB_OUTPUT"
+          echo "version ${CANDIDATE}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Skip when this version is already released
+        id: skip
+        env:
+          VER: ${{ steps.finalize.outputs.simple_version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view "v${VER}" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "v${VER} already exists"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Pack plugin zip
+        if: steps.skip.outputs.skip != 'true'
+        env:
+          VER: ${{ steps.finalize.outputs.simple_version }}
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist/BlaziumGames
+          cp BlaziumGames.uplugin README.md LICENSE dist/BlaziumGames/
+          cp -a Source docs dist/BlaziumGames/
+          python3 - <<'PY'
+          import json, os, zipfile
+          from pathlib import Path
+          path = Path("dist/BlaziumGames/BlaziumGames.uplugin")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          data["VersionName"] = os.environ["VER"]
+          path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          ver = os.environ["VER"]
+          archive = Path(f"dist/BlaziumGames-{ver}.zip")
+          allow_files = {"BlaziumGames.uplugin", "README.md", "LICENSE"}
+          allow_dirs = ("Source/", "docs/")
+          root = Path("dist/BlaziumGames")
+          names = []
+          with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
+              for item in sorted(root.rglob("*")):
+                  if not item.is_file():
+                      continue
+                  rel = item.relative_to(root).as_posix()
+                  if rel not in allow_files and not rel.startswith(allow_dirs):
+                      raise SystemExit(f"not on allowlist: {rel}")
+                  z.write(item, f"BlaziumGames/{rel}")
+                  names.append(rel)
+          banned_names = {"session.cpp", "ipc_client.cpp", "ipc_client.hpp", "exports.cpp", "blaze.cpp", "blaze.hpp", "CMakeLists.txt"}
+          banned_suffix = (".pdb", ".exp", ".ilk", ".dll", ".so")
+          needles = (b"blazium_ecosystem", b"C:\\Users", b"C:/Users/", b"D:\\", b"D:/", b"/Users/")
+          bad = [name for name in names if name.rsplit("/", 1)[-1] in banned_names or name.endswith(banned_suffix)]
+          blob = archive.read_bytes()
+          for needle in needles:
+              if needle in blob:
+                  bad.append(needle.decode())
+          if bad:
+              print("archive rejected: " + ", ".join(bad))
+              raise SystemExit(1)
+          print("archive ok: " + ", ".join(names))
+          PY
+      - name: Publish
+        if: steps.skip.outputs.skip != 'true'
+        env:
+          VER: ${{ steps.finalize.outputs.simple_version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "v${VER}" \
+            "dist/BlaziumGames-${VER}.zip" \
+            --title "v${VER}" \
+            --generate-notes

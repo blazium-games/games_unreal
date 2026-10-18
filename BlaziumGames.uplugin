@@ -1,0 +1,20 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "2.0.0",
+  "FriendlyName": "Blazium Games",
+  "Description": "Thin bindings over the Blazium Games C API. Init, callbacks, user, lobbies, Steam, bugs, ownership, progress, presence, patch notices, items, and dedicated server.",
+  "Category": "Blazium",
+  "CreatedBy": "Blazium",
+  "DocsURL": "https://docs.blazium.games/docs/engines",
+  "EnabledByDefault": true,
+  "CanContainContent": false,
+  "Modules": [
+    {
+      "Name": "BlaziumGames",
+      "Type": "Runtime",
+      "LoadingPhase": "Default",
+      "PlatformAllowList": ["Win64", "Linux"]
+    }
+  ]
+}

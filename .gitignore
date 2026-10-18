@@ -1,0 +1,14 @@
+Binaries/
+Intermediate/
+dist/
+.vs/
+*.user
+*.suo
+DerivedDataCache/
+Saved/
+*.dll
+*.so
+*.pdb
+*.exp
+*.ilk
+*.lib
