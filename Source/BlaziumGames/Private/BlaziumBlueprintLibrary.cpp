@@ -144,22 +144,38 @@ FString UBlaziumBlueprintLibrary::UseItem(const FString& ItemId, const FString& 
 
 FString UBlaziumBlueprintLibrary::ServerUnlockAchievement(const FString& ServerKey, const FString& UserUid, const FString& Slug)
 {
+#if !UE_SERVER
+	return FString();
+#else
 	return FBlaziumApi::Get().ServerUnlockAchievement(ServerKey, UserUid, Slug);
+#endif
 }
 
 FString UBlaziumBlueprintLibrary::ServerSetStat(const FString& ServerKey, const FString& UserUid, const FString& Slug, int64 Value)
 {
+#if !UE_SERVER
+	return FString();
+#else
 	return FBlaziumApi::Get().ServerSetStat(ServerKey, UserUid, Slug, Value);
+#endif
 }
 
 FString UBlaziumBlueprintLibrary::ServerRecordEvent(const FString& ServerKey, const FString& UserUid, const FString& Name)
 {
+#if !UE_SERVER
+	return FString();
+#else
 	return FBlaziumApi::Get().ServerRecordEvent(ServerKey, UserUid, Name);
+#endif
 }
 
 FString UBlaziumBlueprintLibrary::ServerProgressRead(const FString& ServerKey, const FString& UserUid)
 {
+#if !UE_SERVER
+	return FString();
+#else
 	return FBlaziumApi::Get().ServerProgressRead(ServerKey, UserUid);
+#endif
 }
 
 FString UBlaziumBlueprintLibrary::CreateLobby(const FString& LobbyType)
