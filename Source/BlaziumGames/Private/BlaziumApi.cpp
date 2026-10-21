@@ -97,6 +97,16 @@ FString CopyUtf8(const char* Text)
 	{
 		return FString();
 	}
+	constexpr int32 MaxBytes = 1 << 20;
+	int32 Len = 0;
+	while (Len < MaxBytes && Text[Len] != '\0')
+	{
+		++Len;
+	}
+	if (Len >= MaxBytes)
+	{
+		return FString();
+	}
 	return FString(UTF8_TO_TCHAR(Text));
 }
 
@@ -312,7 +322,7 @@ void FBlaziumApi::RunServerCallbacks()
 
 bool FBlaziumApi::ServerLogOn()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Server || Native == nullptr)
 	{
 		return false;
 	}
@@ -321,7 +331,7 @@ bool FBlaziumApi::ServerLogOn()
 
 void FBlaziumApi::ServerLogOff()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Server || Native == nullptr)
 	{
 		return;
 	}
@@ -330,7 +340,7 @@ void FBlaziumApi::ServerLogOff()
 
 bool FBlaziumApi::IsServerLoggedOn()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Server || Native == nullptr)
 	{
 		return false;
 	}
@@ -339,7 +349,7 @@ bool FBlaziumApi::IsServerLoggedOn()
 
 FString FBlaziumApi::GetServerId()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Server || Native == nullptr)
 	{
 		return FString();
 	}
@@ -358,7 +368,7 @@ bool FBlaziumApi::IsServerSession() const
 
 bool FBlaziumApi::IsLoggedOn()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return false;
 	}
@@ -367,7 +377,7 @@ bool FBlaziumApi::IsLoggedOn()
 
 FString FBlaziumApi::GetUserUid()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -376,7 +386,7 @@ FString FBlaziumApi::GetUserUid()
 
 FString FBlaziumApi::GetDisplayName()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -385,7 +395,7 @@ FString FBlaziumApi::GetDisplayName()
 
 FString FBlaziumApi::GetAvatarUrl()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -394,7 +404,7 @@ FString FBlaziumApi::GetAvatarUrl()
 
 FString FBlaziumApi::GetUsername()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -403,7 +413,7 @@ FString FBlaziumApi::GetUsername()
 
 FString FBlaziumApi::GetGameUid()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -412,7 +422,7 @@ FString FBlaziumApi::GetGameUid()
 
 FString FBlaziumApi::SignInWithSteamTicket(const FString& Ticket)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -422,7 +432,7 @@ FString FBlaziumApi::SignInWithSteamTicket(const FString& Ticket)
 
 FString FBlaziumApi::GetSteamId()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -431,7 +441,7 @@ FString FBlaziumApi::GetSteamId()
 
 FString FBlaziumApi::GetSteamExpires()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -440,7 +450,7 @@ FString FBlaziumApi::GetSteamExpires()
 
 FString FBlaziumApi::ReportBug(const FString& Message, const FString& ClientVersion, const FString& OsName, const FString& Arch, const FString& LogText, const FString& BuildId, const FString& ScreenshotPath)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -456,7 +466,7 @@ FString FBlaziumApi::ReportBug(const FString& Message, const FString& ClientVers
 
 FString FBlaziumApi::BugNotices()
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -465,7 +475,7 @@ FString FBlaziumApi::BugNotices()
 
 FString FBlaziumApi::AckBugNotices(const FString& UidsJson)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -475,7 +485,7 @@ FString FBlaziumApi::AckBugNotices(const FString& UidsJson)
 
 FString FBlaziumApi::Ownership(const FString& Edition, const FString& ListingUid)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -486,7 +496,7 @@ FString FBlaziumApi::Ownership(const FString& Edition, const FString& ListingUid
 
 FString FBlaziumApi::UnlockAchievement(const FString& Slug)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -496,7 +506,7 @@ FString FBlaziumApi::UnlockAchievement(const FString& Slug)
 
 FString FBlaziumApi::SetStat(const FString& Slug, int64 Value)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -506,7 +516,7 @@ FString FBlaziumApi::SetStat(const FString& Slug, int64 Value)
 
 FString FBlaziumApi::RecordEvent(const FString& Name)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -516,7 +526,7 @@ FString FBlaziumApi::RecordEvent(const FString& Name)
 
 FString FBlaziumApi::RecordStandardEvents(const FString& BuildId, const FString& DeviceUid)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -527,7 +537,7 @@ FString FBlaziumApi::RecordStandardEvents(const FString& BuildId, const FString&
 
 FString FBlaziumApi::Progress()
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -536,7 +546,7 @@ FString FBlaziumApi::Progress()
 
 FString FBlaziumApi::SetPresence(const FString& Status)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -546,7 +556,7 @@ FString FBlaziumApi::SetPresence(const FString& Status)
 
 FString FBlaziumApi::PatchNotices()
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -555,7 +565,7 @@ FString FBlaziumApi::PatchNotices()
 
 FString FBlaziumApi::AckPatchNotices(const FString& UidsJson)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -565,7 +575,7 @@ FString FBlaziumApi::AckPatchNotices(const FString& UidsJson)
 
 FString FBlaziumApi::TransferItem(const FString& ItemIdsJson, int64 ItemdefId, int64 Count, const FString& Direction, const FString& RequestId)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -577,7 +587,7 @@ FString FBlaziumApi::TransferItem(const FString& ItemIdsJson, int64 ItemdefId, i
 
 FString FBlaziumApi::SocketItem(const FString& ParentId, const FString& ChildId, int64 Index, const FString& RequestId)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -589,7 +599,7 @@ FString FBlaziumApi::SocketItem(const FString& ParentId, const FString& ChildId,
 
 FString FBlaziumApi::UnsocketItem(const FString& ChildId, const FString& RequestId)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -600,7 +610,7 @@ FString FBlaziumApi::UnsocketItem(const FString& ChildId, const FString& Request
 
 FString FBlaziumApi::SetItemStats(const FString& ItemId, const FString& StatsJson, const FString& RequestId)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -612,7 +622,7 @@ FString FBlaziumApi::SetItemStats(const FString& ItemId, const FString& StatsJso
 
 FString FBlaziumApi::UseItem(const FString& ItemId, const FString& RequestId)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -623,7 +633,7 @@ FString FBlaziumApi::UseItem(const FString& ItemId, const FString& RequestId)
 
 FString FBlaziumApi::ServerUnlockAchievement(const FString& ServerKey, const FString& UserUid, const FString& Slug)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Server || Native == nullptr)
 	{
 		return FString();
 	}
@@ -635,7 +645,7 @@ FString FBlaziumApi::ServerUnlockAchievement(const FString& ServerKey, const FSt
 
 FString FBlaziumApi::ServerSetStat(const FString& ServerKey, const FString& UserUid, const FString& Slug, int64 Value)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Server || Native == nullptr)
 	{
 		return FString();
 	}
@@ -647,7 +657,7 @@ FString FBlaziumApi::ServerSetStat(const FString& ServerKey, const FString& User
 
 FString FBlaziumApi::ServerRecordEvent(const FString& ServerKey, const FString& UserUid, const FString& Name)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Server || Native == nullptr)
 	{
 		return FString();
 	}
@@ -659,7 +669,7 @@ FString FBlaziumApi::ServerRecordEvent(const FString& ServerKey, const FString& 
 
 FString FBlaziumApi::ServerProgressRead(const FString& ServerKey, const FString& UserUid)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Server || Native == nullptr)
 	{
 		return FString();
 	}
@@ -670,7 +680,7 @@ FString FBlaziumApi::ServerProgressRead(const FString& ServerKey, const FString&
 
 FString FBlaziumApi::CreateLobby(const FString& LobbyType)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -680,7 +690,7 @@ FString FBlaziumApi::CreateLobby(const FString& LobbyType)
 
 FString FBlaziumApi::JoinLobby(const FString& LobbyId)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -690,7 +700,7 @@ FString FBlaziumApi::JoinLobby(const FString& LobbyId)
 
 FString FBlaziumApi::LobbyStatus(const FString& LobbyId)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -700,7 +710,7 @@ FString FBlaziumApi::LobbyStatus(const FString& LobbyId)
 
 FString FBlaziumApi::FetchIce(const FString& SessionId)
 {
-	if (!EnsureLoaded())
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -710,7 +720,7 @@ FString FBlaziumApi::FetchIce(const FString& SessionId)
 
 FString FBlaziumApi::LobbySeat()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
@@ -719,7 +729,7 @@ FString FBlaziumApi::LobbySeat()
 
 FString FBlaziumApi::LeaveLobby()
 {
-	if (Native == nullptr)
+	if (Mode != EMode::Client || Native == nullptr)
 	{
 		return FString();
 	}
