@@ -1,5 +1,7 @@
 #include "BlaziumApi.h"
 
+#include "Misc/Paths.h"
+
 #if PLATFORM_WINDOWS
 #define BLAZIUM_CALL __cdecl
 #else
@@ -131,18 +133,19 @@ bool FBlaziumApi::EnsureLoaded()
 		return true;
 	}
 #if PLATFORM_WINDOWS
-	const TCHAR* Names[] = {TEXT("blazium_api64.dll"), TEXT("blazium_api64")};
+	const TCHAR* FileName = TEXT("blazium_api64.dll");
+#elif PLATFORM_MAC
+	const TCHAR* FileName = TEXT("libblazium_api.dylib");
 #else
-	const TCHAR* Names[] = {TEXT("libblazium_api.so"), TEXT("blazium_api")};
+	const TCHAR* FileName = TEXT("libblazium_api.so");
 #endif
-	for (const TCHAR* Name : Names)
+	const FString Directory = FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("BlaziumGames"), TEXT("Binaries"), FPlatformProcess::GetBinariesSubdirectory());
+	const FString LibraryPath = FPaths::Combine(Directory, FileName);
+	if (!FPaths::FileExists(LibraryPath))
 	{
-		Dll = FPlatformProcess::GetDllHandle(Name);
-		if (Dll != nullptr)
-		{
-			break;
-		}
+		return false;
 	}
+	Dll = FPlatformProcess::GetDllHandle(*LibraryPath);
 	if (Dll == nullptr)
 	{
 		return false;
