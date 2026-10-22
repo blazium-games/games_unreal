@@ -72,4 +72,16 @@ if header.is_file():
         print("header: " + ", ".join(found))
         sys.exit(1)
 
+api = Path("Source/BlaziumGames/Private/BlaziumApi.cpp").read_text(encoding="utf-8")
+if "GetDllHandle(Name)" in api or 'TEXT("blazium_api64")' in api:
+    print("native library must load from the plugin binaries directory")
+    sys.exit(1)
+if "FPaths::Combine" not in api or "ProjectPluginsDir" not in api:
+    print("native library path is not pinned to the plugin")
+    sys.exit(1)
+subsystem = Path("Source/BlaziumGames/Private/BlaziumSubsystem.cpp").read_text(encoding="utf-8")
+if "GCallbackOwner" not in subsystem:
+    print("native callbacks must run once for the process")
+    sys.exit(1)
+
 print("unreal contract ok")
