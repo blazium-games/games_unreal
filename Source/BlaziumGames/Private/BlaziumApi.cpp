@@ -1,5 +1,6 @@
 #include "BlaziumApi.h"
 
+#include "Interfaces/IPluginManager.h"
 #include "Misc/Paths.h"
 
 #if PLATFORM_WINDOWS
@@ -134,13 +135,17 @@ bool FBlaziumApi::EnsureLoaded()
 	}
 #if PLATFORM_WINDOWS
 	const TCHAR* FileName = TEXT("blazium_api64.dll");
-#elif PLATFORM_MAC
-	const TCHAR* FileName = TEXT("libblazium_api.dylib");
 #else
 	const TCHAR* FileName = TEXT("libblazium_api.so");
 #endif
-	const FString Directory = FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("BlaziumGames"), TEXT("Binaries"), FPlatformProcess::GetBinariesSubdirectory());
+	FString BaseDir = FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("BlaziumGames"));
+	if (const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("BlaziumGames")); Plugin.IsValid())
+	{
+		BaseDir = Plugin->GetBaseDir();
+	}
+	const FString Directory = FPaths::Combine(BaseDir, TEXT("Binaries"), FPlatformProcess::GetBinariesSubdirectory());
 	const FString LibraryPath = FPaths::Combine(Directory, FileName);
+	LibraryPathChecked = LibraryPath;
 	if (!FPaths::FileExists(LibraryPath))
 	{
 		return false;
@@ -236,7 +241,7 @@ EBlaziumInitResult FBlaziumApi::InitClient(FString& OutError)
 	}
 	if (!EnsureLoaded())
 	{
-		OutError = TEXT("blazium_api64.dll or libblazium_api.so is missing");
+		OutError = FString::Printf(TEXT("blazium_api64.dll or libblazium_api.so is missing (%s)"), *LibraryPathChecked);
 		return EBlaziumInitResult::FailedGeneric;
 	}
 	char Err[1024] = {};
@@ -286,7 +291,7 @@ EBlaziumInitResult FBlaziumApi::InitServer(int32 GamePort, const FString& Versio
 	}
 	if (!EnsureLoaded())
 	{
-		OutError = TEXT("blazium_api64.dll or libblazium_api.so is missing");
+		OutError = FString::Printf(TEXT("blazium_api64.dll or libblazium_api.so is missing (%s)"), *LibraryPathChecked);
 		return EBlaziumInitResult::FailedGeneric;
 	}
 	const FUtf8Arg VersionUtf8(Version);

@@ -79,6 +79,22 @@ if "GetDllHandle(Name)" in api or 'TEXT("blazium_api64")' in api:
 if "FPaths::Combine" not in api or "ProjectPluginsDir" not in api:
     print("native library path is not pinned to the plugin")
     sys.exit(1)
+if "IPluginManager::Get().FindPlugin" not in api:
+    print("loader ignores an engine-installed plugin")
+    sys.exit(1)
+if "libblazium_api.dylib" in api:
+    print("macOS player library is not shipped")
+    sys.exit(1)
+if "is missing (%s)" not in api:
+    print("error does not include the path that was checked")
+    sys.exit(1)
+build = Path("Source/BlaziumGames/BlaziumGames.Build.cs").read_text(encoding="utf-8")
+if "RuntimeDependencies.Add" not in build or "blazium_api64.dll" not in build or "libblazium_api.so" not in build:
+    print("packaging does not stage the native library")
+    sys.exit(1)
+if "libblazium_api.dylib" in build:
+    print("packaging stages a macOS library that is not shipped")
+    sys.exit(1)
 subsystem = Path("Source/BlaziumGames/Private/BlaziumSubsystem.cpp").read_text(encoding="utf-8")
 if "GCallbackOwner" not in subsystem:
     print("native callbacks must run once for the process")
