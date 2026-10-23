@@ -71,6 +71,7 @@ private:
 	struct FNative;
 	FNative* Native = nullptr;
 	void* Dll = nullptr;
+	FString LibraryPathChecked;
 
 	enum class EMode : uint8
 	{
