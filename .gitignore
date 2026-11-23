@@ -12,3 +12,9 @@ Saved/
 *.exp
 *.ilk
 *.lib
+!Binaries/
+!Binaries/Win64/
+!Binaries/Linux/
+!Binaries/Win64/blazium_api64.dll
+!Binaries/Win64/blazium_api64.lib
+!Binaries/Linux/libblazium_api.so
