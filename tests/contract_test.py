@@ -2,7 +2,7 @@ from pathlib import Path
 import re
 import sys
 
-# Keep this list aligned with games_sdk/public/blazium/blazium_api_flat.h (SDK 2.1.0).
+# Keep this list aligned with games_sdk/public/blazium/blazium_api_flat.h (SDK 2.2.0).
 SYMBOLS = [
     "BlaziumAPI_InitFlat",
     "BlaziumAPI_Shutdown",
@@ -28,6 +28,13 @@ SYMBOLS = [
     "BlaziumAPI_LeaveLobby",
     "BlaziumAPI_RequestToken",
     "BlaziumAPI_ForgetTokens",
+    "BlaziumAPI_StartLogin",
+    "BlaziumAPI_LoginState",
+    "BlaziumAPI_CancelLogin",
+    "BlaziumAPI_Logout",
+    "BlaziumAPI_ExportSession",
+    "BlaziumAPI_RestoreSession",
+    "BlaziumGameServer_VerifyPlayer",
     "BlaziumAPI_SignInWithSteamTicket",
     "BlaziumAPI_GetSteamId",
     "BlaziumAPI_GetSteamExpires",
@@ -127,4 +134,29 @@ if "Token" in Path("Source/BlaziumGames/Public/BlaziumBlueprintLibrary.h").read_
     print("a token must not be a Blueprint value")
     sys.exit(1)
 
+player_h = Path("Source/BlaziumGames/Public/BlaziumPlayerSession.h").read_text(encoding="utf-8")
+player_cpp = Path("Source/BlaziumGames/Private/BlaziumPlayerSession.cpp").read_text(encoding="utf-8")
+for needle in ("UBlaziumPlayerSession", "StartSignIn", "GetLoginUrl", "GetUserCode", "RestoreSaved", "FBlaziumPlayerVerifier", "FBlaziumSessionRules"):
+    if needle not in player_h:
+        print("player session is missing " + needle)
+        sys.exit(1)
+for needle in ("/api/v1/session", "/public/token/refresh", "/private/logout", "/tokens", "/server/verify-player", "X-Server-Key", "RefreshDue"):
+    if needle not in player_cpp:
+        print("player session does not call " + needle)
+        sys.exit(1)
+if "UFUNCTION" in player_h and "GetToken" in player_h.split("void GetToken")[0].split("UFUNCTION")[-1]:
+    print("a token must not be a Blueprint value")
+    sys.exit(1)
+if "ExportSession" in "".join(line for line in player_h.splitlines() if "UFUNCTION" in line):
+    print("the session must not be a Blueprint value")
+    sys.exit(1)
+if "UE_LOG" in player_cpp:
+    print("the player session must not log; it handles secrets")
+    sys.exit(1)
+if "BlaziumPlayerSession" not in sapi_cpp or "SendWithToken" not in sapi_cpp:
+    print("the Scripted API client does not use the player session")
+    sys.exit(1)
+if '"Json"' not in build:
+    print("the Json module is not a dependency")
+    sys.exit(1)
 print("unreal contract ok")

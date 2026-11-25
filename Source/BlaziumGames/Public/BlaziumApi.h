@@ -68,6 +68,18 @@ public:
 	// Drops cached tokens, so the next RequestToken asks again (after a 401).
 	void ForgetTokens();
 
+	// Launcher-less sign-in through the native library (SDK 2.2.0 or newer). Each returns JSON:
+	// {"ok":true,...} or {"ok":false,"code":...}. StartLogin returns at once; poll LoginState.
+	// The session is a secret: never log it. Keep it only in the platform's protected storage.
+	FString StartLogin();
+	FString LoginState();
+	FString CancelLogin();
+	FString Logout();
+	FString ExportSession();
+	FString RestoreSession(const FString& Session);
+	// A dedicated server proves who a player is with the key of the server and the player's "server" token.
+	FString VerifyPlayer(const FString& ServerKey, const FString& PlayerToken);
+
 	void Release();
 
 private:

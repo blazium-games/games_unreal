@@ -4,7 +4,7 @@ Unreal plugin `BlaziumGames` for [Blazium Games](https://blazium.games), a game 
 
 Download a release zip and copy the `BlaziumGames` folder to `Plugins/BlaziumGames`, then enable Blazium Games. Windows and Linux are the supported targets.
 
-The plugin loads `blazium_api64.dll` on Windows and `libblazium_api.so` on Linux from beside the game executable. It talks to the Blazium launcher on the player's machine. This plugin does not call `api.blazium.online`. macOS has no player build of the library.
+The plugin loads `blazium_api64.dll` on Windows and `libblazium_api.so` on Linux from beside the game executable. It talks to the Blazium launcher on the player's machine. The native client part of this plugin does not call `api.blazium.online`; the player session described under [Player sign-in without the launcher](#player-sign-in-without-the-launcher-220) does, over HTTPS, and needs no library. macOS has no player build of the library.
 
 Put `game.blaze` beside the game executable. This plugin does not read or write that file.
 
@@ -70,6 +70,14 @@ Call->OnSuccess.AddDynamic(this, &AMyActor::HandleSapiDone);
 Call->OnFailure.AddDynamic(this, &AMyActor::HandleSapiDone);
 Call->Activate();
 ```
+
+## Player sign-in without the launcher (2.2.0)
+
+`UBlaziumPlayerSession` (a `UGameInstanceSubsystem`) signs a player in on any platform the plugin builds for, with the HTTP and Json modules only: no native library, no launcher, no `game.blaze`. Call **Configure** with the game uid, then **Restore Saved** and, if nobody is signed in, **Start Sign In**. While the state is Waiting, show `GetLoginUrl()` as a link or QR code (or `GetUserCode()` with `GetVerificationUrl()` on a console). `OnStateChanged` fires on each change. From C++ call `GetToken(TEXT("sapi"), ...)` for a scoped token, `GetChatAccess(...)` for the Blazium IRC host and a ten minute password, and `RefreshIfDue()` from a timer.
+
+When no native client is loaded, `UBlaziumSapi` (**Call Logic**) uses the active player session on its own. A game that runs both in and out of the launcher needs no change.
+
+The saved session is an **unencrypted** file under `Saved/Blazium`. Replace `LoadSavedSession`, `SaveSession` and `ClearSavedSession` with your platform's secure storage (a console save API, the Keychain, the Keystore) before you ship. `FBlaziumPlayerVerifier` checks a `server` token on a dedicated server with the game's server key. `BlaziumGames.uplugin` allows more platforms in 2.2.0 for this reason. This code has been checked with the repo's contract test only; it has not been compiled against Unreal Engine here, so build it in your project before you rely on it.
 
 ## Dedicated server
 

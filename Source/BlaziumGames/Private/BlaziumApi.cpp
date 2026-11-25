@@ -76,6 +76,14 @@ struct FBlaziumApi::FNative
 	// Added in SDK 2.1.0. Optional, so an older library still loads.
 	CStrArgFn BlaziumAPI_RequestToken = nullptr;
 	VoidFn BlaziumAPI_ForgetTokens = nullptr;
+	// Added in SDK 2.2.0 (launcher-less sign-in). Optional, so an older library still loads.
+	CStrFn BlaziumAPI_StartLogin = nullptr;
+	CStrFn BlaziumAPI_LoginState = nullptr;
+	CStrFn BlaziumAPI_CancelLogin = nullptr;
+	CStrFn BlaziumAPI_Logout = nullptr;
+	CStrFn BlaziumAPI_ExportSession = nullptr;
+	CStrArgFn BlaziumAPI_RestoreSession = nullptr;
+	TwoStrFn BlaziumGameServer_VerifyPlayer = nullptr;
 };
 
 namespace
@@ -214,6 +222,13 @@ bool FBlaziumApi::EnsureLoaded()
 	}
 	BindExport(Dll, TEXT("BlaziumAPI_RequestToken"), Native->BlaziumAPI_RequestToken);
 	BindExport(Dll, TEXT("BlaziumAPI_ForgetTokens"), Native->BlaziumAPI_ForgetTokens);
+	BindExport(Dll, TEXT("BlaziumAPI_StartLogin"), Native->BlaziumAPI_StartLogin);
+	BindExport(Dll, TEXT("BlaziumAPI_LoginState"), Native->BlaziumAPI_LoginState);
+	BindExport(Dll, TEXT("BlaziumAPI_CancelLogin"), Native->BlaziumAPI_CancelLogin);
+	BindExport(Dll, TEXT("BlaziumAPI_Logout"), Native->BlaziumAPI_Logout);
+	BindExport(Dll, TEXT("BlaziumAPI_ExportSession"), Native->BlaziumAPI_ExportSession);
+	BindExport(Dll, TEXT("BlaziumAPI_RestoreSession"), Native->BlaziumAPI_RestoreSession);
+	BindExport(Dll, TEXT("BlaziumGameServer_VerifyPlayer"), Native->BlaziumGameServer_VerifyPlayer);
 	return true;
 }
 
@@ -769,4 +784,68 @@ void FBlaziumApi::ForgetTokens()
 	{
 		Native->BlaziumAPI_ForgetTokens();
 	}
+}
+
+namespace
+{
+FString NoStandalone(bool bInitialized)
+{
+	return bInitialized
+		? FString(TEXT("{\"ok\":false,\"code\":\"sdk_too_old\",\"error\":\"the Blazium library is older than SDK 2.2.0\"}"))
+		: FString(TEXT("{\"ok\":false,\"code\":\"no_host\",\"error\":\"Blazium is not initialized\"}"));
+}
+}
+
+// Launcher-less sign-in through the native library (SDK 2.2.0). A game with no native library uses
+// UBlaziumPlayerSession instead, which needs only the HTTP module.
+FString FBlaziumApi::StartLogin()
+{
+	if (Mode != EMode::Client || Native == nullptr) { return NoStandalone(false); }
+	if (Native->BlaziumAPI_StartLogin == nullptr) { return NoStandalone(true); }
+	return CopyUtf8(Native->BlaziumAPI_StartLogin());
+}
+
+FString FBlaziumApi::LoginState()
+{
+	if (Mode != EMode::Client || Native == nullptr) { return NoStandalone(false); }
+	if (Native->BlaziumAPI_LoginState == nullptr) { return NoStandalone(true); }
+	return CopyUtf8(Native->BlaziumAPI_LoginState());
+}
+
+FString FBlaziumApi::CancelLogin()
+{
+	if (Mode != EMode::Client || Native == nullptr) { return NoStandalone(false); }
+	if (Native->BlaziumAPI_CancelLogin == nullptr) { return NoStandalone(true); }
+	return CopyUtf8(Native->BlaziumAPI_CancelLogin());
+}
+
+FString FBlaziumApi::Logout()
+{
+	if (Mode != EMode::Client || Native == nullptr) { return NoStandalone(false); }
+	if (Native->BlaziumAPI_Logout == nullptr) { return NoStandalone(true); }
+	return CopyUtf8(Native->BlaziumAPI_Logout());
+}
+
+FString FBlaziumApi::ExportSession()
+{
+	if (Mode != EMode::Client || Native == nullptr) { return NoStandalone(false); }
+	if (Native->BlaziumAPI_ExportSession == nullptr) { return NoStandalone(true); }
+	return CopyUtf8(Native->BlaziumAPI_ExportSession());
+}
+
+FString FBlaziumApi::RestoreSession(const FString& Session)
+{
+	if (Mode != EMode::Client || Native == nullptr) { return NoStandalone(false); }
+	if (Native->BlaziumAPI_RestoreSession == nullptr) { return NoStandalone(true); }
+	const FUtf8Arg SessionUtf8(Session);
+	return CopyUtf8(Native->BlaziumAPI_RestoreSession(SessionUtf8.Get()));
+}
+
+FString FBlaziumApi::VerifyPlayer(const FString& ServerKey, const FString& PlayerToken)
+{
+	if (Mode != EMode::Server || Native == nullptr) { return NoStandalone(false); }
+	if (Native->BlaziumGameServer_VerifyPlayer == nullptr) { return NoStandalone(true); }
+	const FUtf8Arg KeyUtf8(ServerKey);
+	const FUtf8Arg TokenUtf8(PlayerToken);
+	return CopyUtf8(Native->BlaziumGameServer_VerifyPlayer(KeyUtf8.Get(), TokenUtf8.Get()));
 }

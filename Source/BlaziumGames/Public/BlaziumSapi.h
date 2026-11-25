@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintAsyncActionBase.h"
@@ -54,6 +54,7 @@ public:
 
 private:
 	void Send();
+	void SendWithToken(const FString& GameUid, const FString& Token);
 	void OnResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnected);
 	void Finish(bool bSuccess, int32 Status, const FString& Body, const FString& ErrorKey);
 
