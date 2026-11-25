@@ -73,6 +73,9 @@ struct FBlaziumApi::FNative
 	ServerStatFn BlaziumGameServer_SetStat = nullptr;
 	ThreeStrFn BlaziumGameServer_RecordEvent = nullptr;
 	TwoStrFn BlaziumAPI_ServerProgressRead = nullptr;
+	// Added in SDK 2.1.0. Optional, so an older library still loads.
+	CStrArgFn BlaziumAPI_RequestToken = nullptr;
+	VoidFn BlaziumAPI_ForgetTokens = nullptr;
 };
 
 namespace
@@ -209,6 +212,8 @@ bool FBlaziumApi::EnsureLoaded()
 		Release();
 		return false;
 	}
+	BindExport(Dll, TEXT("BlaziumAPI_RequestToken"), Native->BlaziumAPI_RequestToken);
+	BindExport(Dll, TEXT("BlaziumAPI_ForgetTokens"), Native->BlaziumAPI_ForgetTokens);
 	return true;
 }
 
@@ -742,4 +747,26 @@ FString FBlaziumApi::LeaveLobby()
 		return FString();
 	}
 	return CopyUtf8(Native->BlaziumAPI_LeaveLobby());
+}
+
+FString FBlaziumApi::RequestToken(const FString& Audience)
+{
+	if (Mode != EMode::Client || Native == nullptr)
+	{
+		return FString(TEXT("{\"ok\":false,\"code\":\"no_host\",\"error\":\"Blazium is not initialized\"}"));
+	}
+	if (Native->BlaziumAPI_RequestToken == nullptr)
+	{
+		return FString(TEXT("{\"ok\":false,\"code\":\"sdk_too_old\",\"error\":\"the Blazium library is older than SDK 2.1.0\"}"));
+	}
+	const FUtf8Arg AudienceUtf8(Audience);
+	return CopyUtf8(Native->BlaziumAPI_RequestToken(AudienceUtf8.Get()));
+}
+
+void FBlaziumApi::ForgetTokens()
+{
+	if (Mode == EMode::Client && Native != nullptr && Native->BlaziumAPI_ForgetTokens != nullptr)
+	{
+		Native->BlaziumAPI_ForgetTokens();
+	}
 }

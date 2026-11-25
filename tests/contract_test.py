@@ -2,7 +2,7 @@ from pathlib import Path
 import re
 import sys
 
-# Keep this list aligned with games_sdk/public/blazium/blazium_api_flat.h (SDK 2.0.0).
+# Keep this list aligned with games_sdk/public/blazium/blazium_api_flat.h (SDK 2.1.0).
 SYMBOLS = [
     "BlaziumAPI_InitFlat",
     "BlaziumAPI_Shutdown",
@@ -26,6 +26,8 @@ SYMBOLS = [
     "BlaziumAPI_FetchIce",
     "BlaziumAPI_LobbySeat",
     "BlaziumAPI_LeaveLobby",
+    "BlaziumAPI_RequestToken",
+    "BlaziumAPI_ForgetTokens",
     "BlaziumAPI_SignInWithSteamTicket",
     "BlaziumAPI_GetSteamId",
     "BlaziumAPI_GetSteamExpires",
@@ -67,6 +69,8 @@ if missing:
 header = Path("../games_sdk/public/blazium/blazium_api_flat.h")
 if header.is_file():
     found = re.findall(r"S_CALLTYPE\s+([A-Za-z0-9_]+)\s*\(", header.read_text(encoding="utf-8"))
+    # The callback setters are for hosts that cannot poll; the plugin polls with RunCallbacks.
+    found = [name for name in found if name not in ("BlaziumAPI_SetConnectionCallback", "BlaziumAPI_SetUserChangedCallback")]
     if found != SYMBOLS:
         print("flat header exports differ from the contract list")
         print("header: " + ", ".join(found))
@@ -98,6 +102,29 @@ if "libblazium_api.dylib" in build:
 subsystem = Path("Source/BlaziumGames/Private/BlaziumSubsystem.cpp").read_text(encoding="utf-8")
 if "GCallbackOwner" not in subsystem:
     print("native callbacks must run once for the process")
+    sys.exit(1)
+
+sapi_h = Path("Source/BlaziumGames/Public/BlaziumSapi.h").read_text(encoding="utf-8")
+sapi_cpp = Path("Source/BlaziumGames/Private/BlaziumSapi.cpp").read_text(encoding="utf-8")
+for needle in ("UBlueprintAsyncActionBase", "CallLogic", "ValidLogic", "MaxBodyBytes"):
+    if needle not in sapi_h:
+        print("Scripted API client is missing " + needle)
+        sys.exit(1)
+if 'RequestToken(TEXT("sapi"))' not in sapi_cpp:
+    print("Scripted API client must ask the host for a sapi token")
+    sys.exit(1)
+for banned in ("steam_token", "GetSteamId", "GetSteamExpires", "SignInWithSteamTicket"):
+    if banned in sapi_cpp:
+        print("Scripted API client must not read login material: " + banned)
+        sys.exit(1)
+if "Idempotency-Key" not in sapi_cpp or "ForgetTokens" not in sapi_cpp:
+    print("Scripted API client must keep one Idempotency-Key and refresh the token once after a 401")
+    sys.exit(1)
+if '"HTTP"' not in build:
+    print("the HTTP module is not a dependency")
+    sys.exit(1)
+if "Token" in Path("Source/BlaziumGames/Public/BlaziumBlueprintLibrary.h").read_text(encoding="utf-8"):
+    print("a token must not be a Blueprint value")
     sys.exit(1)
 
 print("unreal contract ok")
