@@ -61,6 +61,13 @@ public:
 	FString LobbySeat();
 	FString LeaveLobby();
 
+	// Asks the host for a short-lived token for this game. Audience is "sapi" or "lobby". Returns the JSON reply
+	// ({"ok":true,"token":...} or {"ok":false,"code":...}). Needs SDK 2.1.0 or newer; an older library returns sdk_too_old.
+	// The token is a secret: never log it or save it.
+	FString RequestToken(const FString& Audience);
+	// Drops cached tokens, so the next RequestToken asks again (after a 401).
+	void ForgetTokens();
+
 	void Release();
 
 private:

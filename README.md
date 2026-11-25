@@ -60,6 +60,17 @@ const FString Ticket = FBlaziumApi::Get().SignInWithSteamTicket(HexTicket);
 const FString Bug = FBlaziumApi::Get().ReportBug(TEXT("player fell through the floor"), TEXT("1.0.0"), TEXT("Windows"), TEXT("x64"), FString(), TEXT("build-1"), FString());
 ```
 
+## Scripted API
+
+`FBlaziumApi::Get().RequestToken(TEXT("sapi"))` asks the host for a short-lived token for this game only. The plugin never mints a token and never reads the login token. The Blueprint node **Call Logic** (`UBlaziumSapi`) calls `https://sapi.blazium.online/v1/{game_uid}/{logic}` with that token, retries a 429 or 503 with the same `Idempotency-Key`, and asks for a fresh token once after a 401. Its **On Success** and **On Failure** pins give the status, the body, and the error key. Tick **Anonymous** for logic marked `auth = anonymous`. The audience `lobby` is also available from `RequestToken`. A token is not a Blueprint value, so it is not exposed to Blueprint. Never log or save one. This needs `blazium_api64.dll` or `libblazium_api.so` from SDK 2.1.0 or newer; an older library returns `sdk_too_old`.
+
+```cpp
+UBlaziumSapi* Call = UBlaziumSapi::CallLogic(this, TEXT("score_submit"), TEXT("POST"), TEXT("{\"score\":10}"), false);
+Call->OnSuccess.AddDynamic(this, &AMyActor::HandleSapiDone);
+Call->OnFailure.AddDynamic(this, &AMyActor::HandleSapiDone);
+Call->Activate();
+```
+
 ## Dedicated server
 
 ```cpp
