@@ -11,6 +11,7 @@ public class BlaziumGames : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"HTTP",
+			"Json",
 		});
 		PrivateDependencyModuleNames.Add("Projects");
 		if (Target.Platform == UnrealTargetPlatform.Win64)

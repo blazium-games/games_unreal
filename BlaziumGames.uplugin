@@ -1,9 +1,9 @@
 {
   "FileVersion": 3,
   "Version": 1,
-  "VersionName": "2.1.0",
+  "VersionName": "2.2.0",
   "FriendlyName": "Blazium Games",
-  "Description": "Thin bindings over the Blazium Games C API. Init, callbacks, user, lobbies, Steam, bugs, scoped tokens for the Scripted API, ownership, progress, presence, patch notices, items, and dedicated server.",
+  "Description": "Thin bindings over the Blazium Games C API. Init, callbacks, user, lobbies, Steam, bugs, scoped tokens for the Scripted API, launcher-less player sign-in (no native library), ownership, progress, presence, patch notices, items, and dedicated server.",
   "Category": "Blazium",
   "CreatedBy": "Blazium",
   "DocsURL": "https://docs.blazium.games/docs/engines",
@@ -14,7 +14,7 @@
       "Name": "BlaziumGames",
       "Type": "Runtime",
       "LoadingPhase": "Default",
-      "PlatformAllowList": ["Win64", "Linux"]
+      "PlatformAllowList": ["Win64", "Linux", "LinuxArm64", "Mac", "Android", "IOS"]
     }
   ]
 }

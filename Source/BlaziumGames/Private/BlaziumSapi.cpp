@@ -1,6 +1,7 @@
-﻿#include "BlaziumSapi.h"
+#include "BlaziumSapi.h"
 
 #include "BlaziumApi.h"
+#include "BlaziumPlayerSession.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpResponse.h"
 #include "Containers/Ticker.h"
@@ -128,6 +129,33 @@ void UBlaziumSapi::Activate()
 
 void UBlaziumSapi::Send()
 {
+	// A player signed in with no launcher (UBlaziumPlayerSession) asks the session for its token.
+	UBlaziumPlayerSession* Player = UBlaziumPlayerSession::Active();
+	if (Player != nullptr && !FBlaziumApi::Get().IsClientSession() && !Player->GetGameUid().IsEmpty())
+	{
+		if (bAnonymous)
+		{
+			SendWithToken(Player->GetGameUid(), FString());
+			return;
+		}
+		TWeakObjectPtr<UBlaziumSapi> Weak(this);
+		const FString PlayerGame = Player->GetGameUid();
+		Player->GetToken(TEXT("sapi"), [Weak, PlayerGame](bool bOk, const FString& PlayerToken, const FString& Code)
+		{
+			UBlaziumSapi* Self = Weak.Get();
+			if (Self == nullptr)
+			{
+				return;
+			}
+			if (!bOk)
+			{
+				Self->Finish(false, 0, FString(), Code.IsEmpty() ? FString(TEXT("not_logged_on")) : Code);
+				return;
+			}
+			Self->SendWithToken(PlayerGame, PlayerToken);
+		});
+		return;
+	}
 	FBlaziumApi& Api = FBlaziumApi::Get();
 	const FString GameUid = Api.GetGameUid();
 	if (GameUid.IsEmpty())
@@ -173,6 +201,11 @@ void UBlaziumSapi::Send()
 			return;
 		}
 	}
+	SendWithToken(GameUid, Token);
+}
+
+void UBlaziumSapi::SendWithToken(const FString& GameUid, const FString& Token)
+{
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetURL(FBlaziumSapiRules::BuildUrl(BaseUrl, GameUid, Logic, Method, Body));
 	Request->SetVerb(Method);
@@ -205,6 +238,10 @@ void UBlaziumSapi::OnResponse(FHttpRequestPtr Request, FHttpResponsePtr Response
 		// The token may have been revoked or aged out early. Ask once more.
 		bRefreshed = true;
 		FBlaziumApi::Get().ForgetTokens();
+		if (UBlaziumPlayerSession* Player = UBlaziumPlayerSession::Active())
+		{
+			Player->ForgetTokens();
+		}
 		Send();
 		return;
 	}
