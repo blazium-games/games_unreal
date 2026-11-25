@@ -727,6 +727,74 @@ void UBlaziumPlayerSession::ForgetTokens()
 	Cache.Reset();
 }
 
+// ---- chat ---------------------------------------------------------------------------------------
+
+void UBlaziumPlayerSession::GetChatAccess(TFunction<void(const FBlaziumChatAccess&)> Done)
+{
+	if (Session.IsEmpty())
+	{
+		FBlaziumChatAccess Refused;
+		Refused.Code = TEXT("not_logged_on");
+		Refused.Error = TEXT("sign in before asking for chat access");
+		Done(Refused);
+		return;
+	}
+	TWeakObjectPtr<UBlaziumPlayerSession> Weak(this);
+	RefreshIfDue([Weak, Done]()
+	{
+		UBlaziumPlayerSession* Self = Weak.Get();
+		if (Self == nullptr)
+		{
+			return;
+		}
+		const FString Used = Self->Session;
+		if (Used.IsEmpty())
+		{
+			FBlaziumChatAccess Ended;
+			Ended.Code = TEXT("not_logged_on");
+			Ended.Error = TEXT("the sign-in has ended; sign in again");
+			Done(Ended);
+			return;
+		}
+		Self->Http(TEXT("POST"), TrimSlash(Self->ApiBase) + TEXT("/private/irc/token"), TEXT("{}"), Used, 20.f,
+			[Weak, Done, Used](int32 Status, const FString& Body)
+			{
+				FBlaziumChatAccess Reply;
+				if (UBlaziumPlayerSession* Again = Weak.Get(); Again != nullptr && Status == 401)
+				{
+					if (Used == Again->Session)
+					{
+						Again->Drop(EBlaziumSignInState::Idle);
+					}
+					Reply.Code = TEXT("not_logged_on");
+					Reply.Error = TEXT("the sign-in has ended; sign in again");
+				}
+				else if (Status < 200 || Status >= 300)
+				{
+					Reply.Code = Status == 0 ? FString(TEXT("service_unavailable")) : FString::Printf(TEXT("http_%d"), Status);
+					Reply.Error = Status == 0 ? FString(TEXT("the chat service could not be reached")) : FBlaziumSessionRules::Refusal(Body);
+				}
+				else
+				{
+					Reply.Username = FBlaziumSessionRules::JsonField(Body, TEXT("username"));
+					Reply.Token = FBlaziumSessionRules::JsonField(Body, TEXT("token"));
+					Reply.Host = FBlaziumSessionRules::JsonField(Body, TEXT("host"));
+					Reply.Port = FCString::Atoi(*FBlaziumSessionRules::JsonField(Body, TEXT("port")));
+					Reply.bTls = FBlaziumSessionRules::JsonField(Body, TEXT("tls")) != TEXT("false");
+					Reply.WebSocket = FBlaziumSessionRules::JsonField(Body, TEXT("websocket"));
+					Reply.bOk = !Reply.Token.IsEmpty() && !Reply.Host.IsEmpty();
+					if (!Reply.bOk)
+					{
+						Reply.Token.Reset();
+						Reply.Code = TEXT("refused");
+						Reply.Error = TEXT("the chat service gave an unexpected answer");
+					}
+				}
+				Done(Reply);
+			});
+	});
+}
+
 // ---- who the player is ----------------------------------------------------------------------------
 
 void UBlaziumPlayerSession::LoadProfile()

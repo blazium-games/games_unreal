@@ -60,6 +60,20 @@ struct BLAZIUMGAMES_API FBlaziumPlayerProof
 	FString Error;
 };
 
+// The way into the Blazium IRC server. Token is the password: a secret that works for ten minutes.
+struct BLAZIUMGAMES_API FBlaziumChatAccess
+{
+	bool bOk = false;
+	FString Username;
+	FString Token;
+	FString Host;
+	int32 Port = 0;
+	bool bTls = true;
+	FString WebSocket;
+	FString Code;
+	FString Error;
+};
+
 // A dedicated server (or any backend) asks who a player is, from the "server" token the player's game
 // sent it. It needs the game's server key. Each token works once, so a leaked one cannot be replayed.
 //
@@ -154,6 +168,10 @@ public:
 	// is due and reuses a token until a minute before it ends. Never hands out the session itself.
 	// C++ only. A token is a secret: do not log it or save it.
 	void GetToken(const FString& Audience, TFunction<void(bool bOk, const FString& Token, const FString& Code)> Done);
+
+	// Signs the player in to the Blazium IRC server: asks for a ten minute password (never the session).
+	// It needs a Blazium account with a username; a Steam player with no account has no chat. C++ only.
+	void GetChatAccess(TFunction<void(const FBlaziumChatAccess&)> Done);
 
 	// Drops cached tokens, so the next GetToken asks again (after a 401).
 	void ForgetTokens();
