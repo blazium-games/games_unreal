@@ -18,6 +18,7 @@ public class BlaziumGames : ModuleRules
 		{
 			RuntimeDependencies.Add("$(PluginDir)/Binaries/Win64/blazium_api64.dll");
 			PublicDelayLoadDLLs.Add("blazium_api64.dll");
+			PublicSystemLibraries.Add("crypt32.lib");
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Linux || Target.Platform == UnrealTargetPlatform.LinuxArm64)
 		{
