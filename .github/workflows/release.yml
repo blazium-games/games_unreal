@@ -41,7 +41,7 @@ jobs:
           if [ -z "$COMPUTED" ]; then
             COMPUTED="$BASE"
           fi
-          if ! printf '%s' "$COMPUTED" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+'; then
+          if [[ ! "$COMPUTED" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "computed version is not MAJOR.MINOR.PATCH"
             exit 1
           fi
