@@ -15,37 +15,55 @@ jobs:
   ci:
     uses: ./.github/workflows/ci.yml
 
-  release:
+  # Third-party actions run here, with a read-only token and no checkout.
+  # Keep every `uses:` pinned to a full commit SHA; review the commit before bumping it.
+  version:
     needs: ci
+    if: github.ref_name == 'master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      simple_version: ${{ steps.finalize.outputs.simple_version }}
+    steps:
+      - name: Get Version with Bioblaze/game-semver-action
+        id: version
+        uses: Bioblaze/game-semver-action@ed2e83561fc3b591c6046da0a36722994c659657 # v10
+        with:
+          personal_github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Finalize version
+        id: finalize
+        env:
+          COMPUTED: ${{ steps.version.outputs.simple_version }}
+        run: |
+          set -euo pipefail
+          BASE="2.0.0"
+          if [ -z "$COMPUTED" ]; then
+            COMPUTED="$BASE"
+          fi
+          if ! printf '%s' "$COMPUTED" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "computed version is not MAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          CANDIDATE="$(printf '%s\n%s\n' "$COMPUTED" "$BASE" | sort -V | tail -n1)"
+          echo "simple_version=${CANDIDATE}" >> "$GITHUB_OUTPUT"
+          echo "version ${CANDIDATE}" >> "$GITHUB_STEP_SUMMARY"
+
+  # The contents-write token is only used by the pinned checkout and gh below.
+  release:
+    needs: version
     if: github.ref_name == 'master'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-      - name: Get Version with Bioblaze/game-semver-action
-        id: version
-        uses: Bioblaze/game-semver-action@v10
-        with:
-          personal_github_token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Finalize version
-        id: finalize
-        run: |
-          set -euo pipefail
-          COMPUTED="${{ steps.version.outputs.simple_version }}"
-          BASE="2.0.0"
-          if [ -z "$COMPUTED" ]; then
-            COMPUTED="$BASE"
-          fi
-          CANDIDATE="$(printf '%s\n%s\n' "$COMPUTED" "$BASE" | sort -V | tail -n1)"
-          echo "simple_version=${CANDIDATE}" >> "$GITHUB_OUTPUT"
-          echo "version ${CANDIDATE}" >> "$GITHUB_STEP_SUMMARY"
+          persist-credentials: false
       - name: Skip when this version is already released
         id: skip
         env:
-          VER: ${{ steps.finalize.outputs.simple_version }}
+          VER: ${{ needs.version.outputs.simple_version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
@@ -58,7 +76,7 @@ jobs:
       - name: Pack plugin zip
         if: steps.skip.outputs.skip != 'true'
         env:
-          VER: ${{ steps.finalize.outputs.simple_version }}
+          VER: ${{ needs.version.outputs.simple_version }}
         run: |
           set -euo pipefail
           rm -rf dist
@@ -103,7 +121,7 @@ jobs:
       - name: Publish
         if: steps.skip.outputs.skip != 'true'
         env:
-          VER: ${{ steps.finalize.outputs.simple_version }}
+          VER: ${{ needs.version.outputs.simple_version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
