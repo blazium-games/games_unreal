@@ -12,6 +12,23 @@
 #include "HAL/FileManager.h"
 #include "GenericPlatform/GenericPlatformHttp.h"
 
+// Platforms with a default store for the session between runs. Elsewhere it stays in memory unless the
+// game sets LoadSavedSession, SaveSession and ClearSavedSession.
+#define BLAZIUM_SESSION_FILE ((PLATFORM_UNIX || PLATFORM_APPLE) && !PLATFORM_ANDROID)
+#define BLAZIUM_SESSION_STORE (PLATFORM_WINDOWS || BLAZIUM_SESSION_FILE)
+
+#if PLATFORM_WINDOWS
+#include "Windows/WindowsHWrapper.h"
+#include "Windows/AllowWindowsPlatformTypes.h"
+#include <wincrypt.h>
+#include "Windows/HideWindowsPlatformTypes.h"
+#elif BLAZIUM_SESSION_FILE
+#include <cstdlib>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 TWeakObjectPtr<UBlaziumPlayerSession> UBlaziumPlayerSession::ActiveSession;
 
 namespace
@@ -72,6 +89,274 @@ FString TrimSlash(const FString& Base)
 	}
 	return Out;
 }
+
+// A game uid that is safe as part of a file name.
+bool IsStoreName(const FString& GameUid)
+{
+	if (GameUid.IsEmpty() || GameUid.Len() > 64)
+	{
+		return false;
+	}
+	for (const TCHAR* C = *GameUid; *C; ++C)
+	{
+		const bool bOk = (*C >= TEXT('a') && *C <= TEXT('z')) || (*C >= TEXT('A') && *C <= TEXT('Z'))
+			|| (*C >= TEXT('0') && *C <= TEXT('9')) || *C == TEXT('-') || *C == TEXT('_');
+		if (!bOk)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+// ---- the default session store ----------------------------------------------------------------------
+//
+// The session is a bearer for the player's account, so it is never written where another user, or a copy
+// of the game's Saved folder, can use it.
+
+#if PLATFORM_WINDOWS
+
+// Windows: sealed with DPAPI to the signed-in Windows user. The file is useless to another user or machine.
+FString SealedSessionPath(const FString& GameUid)
+{
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Blazium"), TEXT("session-") + GameUid + TEXT(".sealed"));
+}
+
+FString LoadStoredSession(const FString& GameUid)
+{
+	TArray<uint8> Sealed;
+	if (!IsStoreName(GameUid) || !FFileHelper::LoadFileToArray(Sealed, *SealedSessionPath(GameUid), FILEREAD_Silent) || Sealed.Num() == 0)
+	{
+		return FString();
+	}
+	DATA_BLOB In;
+	In.pbData = Sealed.GetData();
+	In.cbData = static_cast<DWORD>(Sealed.Num());
+	DATA_BLOB Plain = {};
+	if (!CryptUnprotectData(&In, nullptr, nullptr, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN, &Plain))
+	{
+		return FString();
+	}
+	TArray<ANSICHAR> Text;
+	Text.Append(reinterpret_cast<const ANSICHAR*>(Plain.pbData), static_cast<int32>(Plain.cbData));
+	Text.Add('\0');
+	SecureZeroMemory(Plain.pbData, Plain.cbData);
+	LocalFree(Plain.pbData);
+	const FString Out = FString(UTF8_TO_TCHAR(Text.GetData())).TrimStartAndEnd();
+	FMemory::Memzero(Text.GetData(), Text.Num());
+	return Out;
+}
+
+void StoreSession(const FString& GameUid, const FString& Value)
+{
+	if (!IsStoreName(GameUid))
+	{
+		return;
+	}
+	const FTCHARToUTF8 Utf8(*Value);
+	DATA_BLOB In;
+	In.pbData = reinterpret_cast<BYTE*>(const_cast<ANSICHAR*>(reinterpret_cast<const ANSICHAR*>(Utf8.Get())));
+	In.cbData = static_cast<DWORD>(Utf8.Length());
+	DATA_BLOB Sealed = {};
+	if (!CryptProtectData(&In, nullptr, nullptr, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN, &Sealed))
+	{
+		IFileManager::Get().Delete(*SealedSessionPath(GameUid), false, true, true);
+		return;
+	}
+	TArray<uint8> Bytes;
+	Bytes.Append(Sealed.pbData, static_cast<int32>(Sealed.cbData));
+	LocalFree(Sealed.pbData);
+	FFileHelper::SaveArrayToFile(Bytes, *SealedSessionPath(GameUid));
+}
+
+void ForgetStoredSession(const FString& GameUid)
+{
+	if (IsStoreName(GameUid))
+	{
+		IFileManager::Get().Delete(*SealedSessionPath(GameUid), false, true, true);
+	}
+}
+
+#elif BLAZIUM_SESSION_FILE
+
+// Linux, macOS and iOS: a 0600 file in a 0700 "blazium" folder of the user's cache (which macOS and iOS
+// backups skip), outside the game's Saved folder. Every step goes through the one folder handle opened and checked here.
+constexpr int32 MaxStoredSessionBytes = 16 * 1024;
+
+class FSessionFolder
+{
+public:
+	FSessionFolder()
+	{
+		FString Root;
+#if PLATFORM_APPLE
+		const char* Home = getenv("HOME");
+		if (Home != nullptr && Home[0] == '/')
+		{
+			Root = FString(UTF8_TO_TCHAR(Home)) + TEXT("/Library/Caches");
+		}
+#else
+		const char* Cache = getenv("XDG_CACHE_HOME");
+		const char* Home = getenv("HOME");
+		if (Cache != nullptr && Cache[0] == '/')
+		{
+			Root = FString(UTF8_TO_TCHAR(Cache));
+		}
+		else if (Home != nullptr && Home[0] == '/')
+		{
+			Root = FString(UTF8_TO_TCHAR(Home)) + TEXT("/.cache");
+		}
+#endif
+		if (Root.IsEmpty())
+		{
+			return;
+		}
+		const FTCHARToUTF8 RootUtf8(*Root);
+		const char* RootPath = reinterpret_cast<const char*>(RootUtf8.Get());
+		mkdir(RootPath, 0700);
+		const int RootFd = open(RootPath, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+		if (RootFd < 0)
+		{
+			return;
+		}
+		mkdirat(RootFd, "blazium", 0700);
+		Fd = openat(RootFd, "blazium", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+		close(RootFd);
+		if (Fd < 0)
+		{
+			return;
+		}
+		struct stat St;
+		const bool bMine = fstat(Fd, &St) == 0 && S_ISDIR(St.st_mode) && St.st_uid == geteuid();
+		if (!bMine || ((St.st_mode & 077) != 0 && fchmod(Fd, 0700) != 0))
+		{
+			close(Fd);
+			Fd = -1;
+		}
+	}
+
+	~FSessionFolder()
+	{
+		if (Fd >= 0)
+		{
+			close(Fd);
+		}
+	}
+
+	FSessionFolder(const FSessionFolder&) = delete;
+	FSessionFolder& operator=(const FSessionFolder&) = delete;
+
+	int Get() const { return Fd; }
+
+private:
+	int Fd = -1;
+};
+
+FString LoadStoredSession(const FString& GameUid)
+{
+	if (!IsStoreName(GameUid))
+	{
+		return FString();
+	}
+	FSessionFolder Folder;
+	if (Folder.Get() < 0)
+	{
+		return FString();
+	}
+	const FTCHARToUTF8 Name(*(TEXT("session-") + GameUid));
+	const char* FileName = reinterpret_cast<const char*>(Name.Get());
+	const int File = openat(Folder.Get(), FileName, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC);
+	if (File < 0)
+	{
+		return FString();
+	}
+	struct stat St;
+	if (fstat(File, &St) != 0 || !S_ISREG(St.st_mode) || St.st_uid != geteuid() || (St.st_mode & 077) != 0
+		|| St.st_size <= 0 || St.st_size > MaxStoredSessionBytes)
+	{
+		close(File);
+		unlinkat(Folder.Get(), FileName, 0);
+		return FString();
+	}
+	char Buffer[MaxStoredSessionBytes + 1];
+	int32 Used = 0;
+	while (Used < St.st_size)
+	{
+		const ssize_t Got = read(File, Buffer + Used, static_cast<size_t>(St.st_size - Used));
+		if (Got <= 0)
+		{
+			break;
+		}
+		Used += static_cast<int32>(Got);
+	}
+	close(File);
+	Buffer[Used] = '\0';
+	const FString Out = FString(UTF8_TO_TCHAR(Buffer)).TrimStartAndEnd();
+	FMemory::Memzero(Buffer, sizeof(Buffer));
+	return Out;
+}
+
+void StoreSession(const FString& GameUid, const FString& Value)
+{
+	if (!IsStoreName(GameUid))
+	{
+		return;
+	}
+	FSessionFolder Folder;
+	if (Folder.Get() < 0)
+	{
+		return;
+	}
+	const FTCHARToUTF8 Name(*(TEXT("session-") + GameUid));
+	const FTCHARToUTF8 Next(*(TEXT("session-") + GameUid + TEXT(".next")));
+	const char* FileName = reinterpret_cast<const char*>(Name.Get());
+	const char* NextName = reinterpret_cast<const char*>(Next.Get());
+	unlinkat(Folder.Get(), NextName, 0);
+	const int File = openat(Folder.Get(), NextName, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+	if (File < 0)
+	{
+		unlinkat(Folder.Get(), FileName, 0);
+		return;
+	}
+	const FTCHARToUTF8 Bytes(*Value);
+	const char* Data = reinterpret_cast<const char*>(Bytes.Get());
+	const int32 Size = Bytes.Length();
+	int32 Done = 0;
+	while (Done < Size)
+	{
+		const ssize_t Wrote = write(File, Data + Done, static_cast<size_t>(Size - Done));
+		if (Wrote <= 0)
+		{
+			break;
+		}
+		Done += static_cast<int32>(Wrote);
+	}
+	const bool bWritten = Done == Size && fsync(File) == 0;
+	if (close(File) != 0 || !bWritten || renameat(Folder.Get(), NextName, Folder.Get(), FileName) != 0)
+	{
+		unlinkat(Folder.Get(), NextName, 0);
+		unlinkat(Folder.Get(), FileName, 0);
+	}
+}
+
+void ForgetStoredSession(const FString& GameUid)
+{
+	if (!IsStoreName(GameUid))
+	{
+		return;
+	}
+	FSessionFolder Folder;
+	if (Folder.Get() < 0)
+	{
+		return;
+	}
+	const FTCHARToUTF8 Name(*(TEXT("session-") + GameUid));
+	const FTCHARToUTF8 Next(*(TEXT("session-") + GameUid + TEXT(".next")));
+	unlinkat(Folder.Get(), reinterpret_cast<const char*>(Name.Get()), 0);
+	unlinkat(Folder.Get(), reinterpret_cast<const char*>(Next.Get()), 0);
+}
+
+#endif
 }
 
 // ---- rules ---------------------------------------------------------------------------------------
@@ -261,20 +546,11 @@ void UBlaziumPlayerSession::Initialize(FSubsystemCollectionBase& Collection)
 	Super::Initialize(Collection);
 	ActiveSession = this;
 	Clock = []() { return FDateTime::UtcNow().ToUnixTimestamp(); };
-	LoadSavedSession = [this]()
-	{
-		FString Text;
-		FFileHelper::LoadFileToString(Text, *DefaultSessionPath());
-		return Text.TrimStartAndEnd();
-	};
-	SaveSession = [this](const FString& Saved)
-	{
-		FFileHelper::SaveStringToFile(Saved, *DefaultSessionPath());
-	};
-	ClearSavedSession = [this]()
-	{
-		IFileManager::Get().Delete(*DefaultSessionPath(), false, true, true);
-	};
+#if BLAZIUM_SESSION_STORE
+	LoadSavedSession = [this]() { return LoadStoredSession(GameUid); };
+	SaveSession = [this](const FString& Saved) { StoreSession(GameUid, Saved); };
+	ClearSavedSession = [this]() { ForgetStoredSession(GameUid); };
+#endif
 	// Renews the session a little before it runs out, for as long as the game runs.
 	TWeakObjectPtr<UBlaziumPlayerSession> Weak(this);
 	KeepFreshHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Weak](float)
@@ -301,7 +577,7 @@ void UBlaziumPlayerSession::Deinitialize()
 	Super::Deinitialize();
 }
 
-FString UBlaziumPlayerSession::DefaultSessionPath() const
+FString UBlaziumPlayerSession::LegacySessionPath() const
 {
 	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Blazium"), TEXT("session-") + GameUid + TEXT(".txt"));
 }
@@ -314,6 +590,12 @@ int64 UBlaziumPlayerSession::Now() const
 void UBlaziumPlayerSession::Configure(const FString& InGameUid)
 {
 	GameUid = InGameUid.TrimStartAndEnd();
+	// Earlier versions kept the session in plain text here. It is dropped, not moved: the player signs in
+	// once more.
+	if (IsStoreName(GameUid))
+	{
+		IFileManager::Get().Delete(*LegacySessionPath(), false, true, true);
+	}
 }
 
 void UBlaziumPlayerSession::Notify()

@@ -194,8 +194,11 @@ public:
 	// Seconds the login service may hold one poll.
 	int32 PollSeconds = 10;
 
-	// Where the session is kept between runs. The defaults write a file under Saved/Blazium, which is NOT
-	// encrypted: on a phone or console set these to the Keychain, the Keystore or protected save data.
+	// Where the session is kept between runs. It is a bearer for the player's account. The defaults never
+	// put it in the game's Saved folder: Windows seals it to the Windows user with DPAPI, and Linux, macOS
+	// and iOS keep it in an owner-only file under the user's cache folder (which macOS and iOS backups
+	// skip). Android and consoles have no default, so the session lasts one run; set these to the Keystore
+	// or protected save data.
 	TFunction<FString()> LoadSavedSession;
 	TFunction<void(const FString&)> SaveSession;
 	TFunction<void()> ClearSavedSession;
@@ -221,7 +224,7 @@ private:
 	void Fail(int32 Mine, const FString& Why);
 	void LoadProfile();
 	void Notify();
-	FString DefaultSessionPath() const;
+	FString LegacySessionPath() const;
 	int64 Now() const;
 
 	EBlaziumSignInState State = EBlaziumSignInState::Idle;
